@@ -88,13 +88,29 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            ScreenRecorderApp.pendingResultCode = result.resultCode
-            ScreenRecorderApp.pendingResultData = result.data
-            val pm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            ScreenRecorderApp.pendingMediaProjection = pm.getMediaProjection(result.resultCode, result.data!!)
-            startCountdownThenRecord()
+            try {
+                val svcIntent = Intent(this, ScreenRecorderService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svcIntent)
+                } else {
+                    startService(svcIntent)
+                }
+                val pm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                ScreenRecorderApp.pendingMediaProjection = pm.getMediaProjection(result.resultCode, result.data!!)
+                ScreenRecorderApp.pendingResultCode = result.resultCode
+                ScreenRecorderApp.pendingResultData = result.data
+                writeEmergencyLog("MP OK")
+                startCountdownThenRecord()
+            } catch (e: Exception) {
+                writeEmergencyLog("MP FAIL: ${e.javaClass.simpleName}: ${e.message}")
+                Toast.makeText(this, "失败: ${e.message}", Toast.LENGTH_LONG).show()
+                ScreenRecorderApp.recordState = RecordState.IDLE
+                ScreenRecorderApp.pendingMediaProjection = null
+                stopService(Intent(this, ScreenRecorderService::class.java))
+            }
         } else {
             ScreenRecorderApp.recordState = RecordState.IDLE
+            ScreenRecorderApp.pendingMediaProjection = null
             ScreenRecorderApp.pendingResultCode = 0
             ScreenRecorderApp.pendingResultData = null
             stopService(Intent(this, ScreenRecorderService::class.java))
@@ -538,5 +554,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+    }
+
+    private fun writeEmergencyLog(msg: String) {
+        try {
+            val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val f = java.io.File(java.io.File(Environment.getExternalStorageDirectory(), "ImitateAZRecorder"), "em_$ts.txt")
+            f.parentFile?.mkdirs()
+            f.writeText("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())} $msg\n")
+        } catch (_: Exception) {}
     }
 }
