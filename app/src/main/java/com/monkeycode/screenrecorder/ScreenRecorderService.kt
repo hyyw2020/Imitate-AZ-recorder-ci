@@ -10,9 +10,12 @@ import android.graphics.Color
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -111,13 +114,26 @@ class ScreenRecorderService : Service() {
     private fun handleStart() {
         svcState = RecordState.STARTING
         val qp = qualityParams ?: return writeLog("ERROR 质量参数缺失")
-        val mp = ScreenRecorderApp.pendingMediaProjection
+
+        // 在 Service 内部创建 MediaProjection（已通过 startForeground，满足 Android 14 要求）
         val resultCode = ScreenRecorderApp.pendingResultCode
         val resultData = ScreenRecorderApp.pendingResultData
-        if (mp == null || resultData == null) {
-            writeLog("ERROR MediaProjection 数据缺失")
+        if (resultCode == 0 || resultData == null) {
+            writeLog("ERROR MediaProjection 数据缺失: resultCode=$resultCode data=$resultData")
             svcState = RecordState.FAILED
             ScreenRecorderApp.lastError = "MediaProjection 数据缺失"
+            stopSelf()
+            return
+        }
+        var mp: android.media.projection.MediaProjection? = null
+        try {
+            val pm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mp = pm.getMediaProjection(resultCode, resultData)
+            writeLog("MediaProjection 创建成功")
+        } catch (e: Exception) {
+            writeLog("ERROR MediaProjection 创建失败: ${e.javaClass.simpleName}: ${e.message}")
+            svcState = RecordState.FAILED
+            ScreenRecorderApp.lastError = "MediaProjection 创建失败: ${e.message}"
             stopSelf()
             return
         }

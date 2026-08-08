@@ -11,6 +11,7 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -88,31 +89,15 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            try {
-                val svcIntent = Intent(this, ScreenRecorderService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(svcIntent)
-                } else {
-                    startService(svcIntent)
-                }
-                val pm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                ScreenRecorderApp.pendingMediaProjection = pm.getMediaProjection(result.resultCode, result.data!!)
-                ScreenRecorderApp.pendingResultCode = result.resultCode
-                ScreenRecorderApp.pendingResultData = result.data
-                writeEmergencyLog("MP OK")
-                startCountdownThenRecord()
-            } catch (e: Exception) {
-                writeEmergencyLog("MP FAIL: ${e.javaClass.simpleName}: ${e.message}")
-                Toast.makeText(this, "失败: ${e.message}", Toast.LENGTH_LONG).show()
-                ScreenRecorderApp.recordState = RecordState.IDLE
-                ScreenRecorderApp.pendingMediaProjection = null
-                stopService(Intent(this, ScreenRecorderService::class.java))
-            }
+            ScreenRecorderApp.pendingResultCode = result.resultCode
+            ScreenRecorderApp.pendingResultData = result.data
+            writeEmergencyLog("授权成功, 准备启动Service")
+            startCountdownThenRecord()
         } else {
             ScreenRecorderApp.recordState = RecordState.IDLE
-            ScreenRecorderApp.pendingMediaProjection = null
             ScreenRecorderApp.pendingResultCode = 0
             ScreenRecorderApp.pendingResultData = null
+            ScreenRecorderApp.pendingMediaProjection = null
             stopService(Intent(this, ScreenRecorderService::class.java))
             Toast.makeText(this, "用户取消录屏授权", Toast.LENGTH_SHORT).show()
         }
